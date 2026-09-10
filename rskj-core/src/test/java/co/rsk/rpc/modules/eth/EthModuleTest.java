@@ -38,6 +38,9 @@ import org.ethereum.TestUtils;
 import org.ethereum.config.Constants;
 import org.ethereum.config.blockchain.upgrades.ActivationConfig;
 import org.ethereum.core.*;
+import org.ethereum.core.Block;
+import org.ethereum.core.BlockHeader;
+import org.ethereum.core.Blockchain;
 import org.ethereum.crypto.ECKey;
 import org.ethereum.crypto.signature.ECDSASignature;
 import org.ethereum.datasource.HashMapDB;
@@ -750,6 +753,61 @@ class EthModuleTest {
         HexAddressParam addressParam = new HexAddressParam(TestUtils.generateAddress("addr").toHexString());
         String addr = eth.getCode(addressParam, "pending");
         MatcherAssert.assertThat(Hex.decode(addr.substring("0x".length())), is(expectedCode));
+    }
+
+    @Test
+    void getCodeByBlockHash() {
+        byte[] expectedCode = new byte[]{1, 2, 3};
+        Keccak256 blockHash = TestUtils.generateHash("block");
+        BlockHeader header = mock(BlockHeader.class);
+        Block block = mock(Block.class);
+        doReturn(header).when(block).getHeader();
+        Blockchain blockchain = mock(Blockchain.class);
+        doReturn(block).when(blockchain).getBlockByHash(blockHash.getBytes());
+        RepositorySnapshot snapshot = mock(RepositorySnapshot.class);
+        doReturn(expectedCode).when(snapshot).getCode(any(RskAddress.class));
+        RepositoryLocator repositoryLocator = mock(RepositoryLocator.class);
+        doReturn(snapshot).when(repositoryLocator).snapshotAt(header);
+
+        EthModule eth = newEthModule(blockchain, repositoryLocator);
+
+        HexAddressParam addressParam = new HexAddressParam(TestUtils.generateAddress("addr").toHexString());
+        String code = eth.getCode(addressParam, blockHash.toJsonString());
+        MatcherAssert.assertThat(Hex.decode(code.substring("0x".length())), is(expectedCode));
+    }
+
+    @Test
+    void getCodeByUnknownBlockThrowsBlockNotFound() {
+        Blockchain blockchain = mock(Blockchain.class);
+        EthModule eth = newEthModule(blockchain, mock(RepositoryLocator.class));
+        HexAddressParam addressParam = new HexAddressParam(TestUtils.generateAddress("addr").toHexString());
+
+        for (String blockId : new String[]{TestUtils.generateHash("missing").toJsonString(), "0x7fffffff"}) {
+            RskJsonRpcRequestException e = assertThrows(RskJsonRpcRequestException.class, () -> eth.getCode(addressParam, blockId));
+            assertEquals(-32600, e.getCode());
+        }
+    }
+
+    private EthModule newEthModule(Blockchain blockchain, RepositoryLocator repositoryLocator) {
+        BridgeSupportFactory bridgeSupportFactory = new BridgeSupportFactory(null, null, null, signatureCache);
+        return new EthModule(
+                null,
+                (byte) 0,
+                blockchain,
+                mock(TransactionPool.class),
+                null,
+                null,
+                repositoryLocator,
+                null,
+                null,
+                bridgeSupportFactory,
+                config.getGasEstimationCap(),
+                config.getCallGasCap(),
+                config.getActivationConfig(),
+                new PrecompiledContracts(config, bridgeSupportFactory, signatureCache),
+                false,
+                null
+        );
     }
 
     @Test

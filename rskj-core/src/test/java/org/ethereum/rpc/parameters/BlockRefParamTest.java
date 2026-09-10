@@ -17,9 +17,11 @@
  */
 package org.ethereum.rpc.parameters;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.ethereum.rpc.exception.RskJsonRpcRequestException;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -111,5 +113,31 @@ public class BlockRefParamTest {
         };
 
         assertThrows(RskJsonRpcRequestException.class, () -> new BlockRefParam(inputs));
+    }
+
+    @Test
+    public void testDeserializeBooleanRequireCanonical() throws IOException {
+        String json = "{\"blockHash\":\"0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3\",\"requireCanonical\":false}";
+
+        BlockRefParam blockRefParam = new ObjectMapper().readValue(json, BlockRefParam.class);
+
+        assertEquals("false", blockRefParam.getInputs().get("requireCanonical"));
+        assertEquals("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3", blockRefParam.getInputs().get("blockHash"));
+    }
+
+    @Test
+    public void testDeserializeStringRequireCanonical() throws IOException {
+        String json = "{\"blockNumber\":\"0x76c0\",\"requireCanonical\":\"true\"}";
+
+        BlockRefParam blockRefParam = new ObjectMapper().readValue(json, BlockRefParam.class);
+
+        assertEquals("true", blockRefParam.getInputs().get("requireCanonical"));
+    }
+
+    @Test
+    public void testDeserializeNonScalarInputValue() {
+        String json = "{\"blockNumber\":\"0x76c0\",\"requireCanonical\":[true]}";
+
+        assertThrows(RskJsonRpcRequestException.class, () -> new ObjectMapper().readValue(json, BlockRefParam.class));
     }
 }

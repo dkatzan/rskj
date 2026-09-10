@@ -46,8 +46,10 @@ import org.ethereum.db.MutableRepository;
 import org.ethereum.rpc.CallArguments;
 import org.ethereum.rpc.converters.CallArgumentsToByteArray;
 import org.ethereum.rpc.exception.RskJsonRpcRequestException;
+import org.ethereum.rpc.parameters.BlockHashParam;
 import org.ethereum.rpc.parameters.BlockIdentifierParam;
 import org.ethereum.rpc.parameters.CallArgumentsParam;
+import org.ethereum.rpc.parameters.HashParam32;
 import org.ethereum.rpc.parameters.HexAddressParam;
 import org.ethereum.rpc.parameters.HexDataParam;
 import org.ethereum.util.ByteUtil;
@@ -67,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 
 import static java.util.Arrays.copyOfRange;
+import static org.ethereum.rpc.exception.RskJsonRpcRequestException.blockNotFound;
 import static org.ethereum.rpc.exception.RskJsonRpcRequestException.invalidParamError;
 
 // TODO add all RPC methods
@@ -313,17 +316,14 @@ public class EthModule
         try {
 
             AccountInformationProvider accountInformationProvider = getAccountInformationProvider(blockId);
+            byte[] code = accountInformationProvider.getCode(addr);
 
-            if (accountInformationProvider != null) {
-                byte[] code = accountInformationProvider.getCode(addr);
-
-                // Code can be null, if there is no account.
-                if (code == null) {
-                    code = new byte[0];
-                }
-
-                s = HexUtils.toUnformattedJsonHex(code);
+            // Code can be null, if there is no account.
+            if (code == null) {
+                code = new byte[0];
             }
+
+            s = HexUtils.toUnformattedJsonHex(code);
 
             return s;
         } finally {
@@ -342,16 +342,22 @@ public class EthModule
             case "latest":
                 return repositoryLocator.snapshotAt(blockchain.getBestBlock().getHeader());
             default:
-                try {
-                    long blockNumber = HexUtils.stringHexToBigInteger(id).longValue();
-                    Block requestedBlock = blockchain.getBlockByNumber(blockNumber);
-                    if (requestedBlock != null) {
-                        return repositoryLocator.snapshotAt(requestedBlock.getHeader());
-                    }
-                    return null;
-                } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
-                    throw invalidParamError("invalid blocknumber " + id);
+                Block requestedBlock = getBlockByHashOrNumber(id);
+                if (requestedBlock == null) {
+                    throw blockNotFound(String.format("Block %s not found", id));
                 }
+                return repositoryLocator.snapshotAt(requestedBlock.getHeader());
+        }
+    }
+
+    private Block getBlockByHashOrNumber(String id) {
+        if (HashParam32.isHash32HexLengthValid(id)) {
+            return blockchain.getBlockByHash(new BlockHashParam(id).getHash().getBytes());
+        }
+        try {
+            return blockchain.getBlockByNumber(HexUtils.stringHexToBigInteger(id).longValue());
+        } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
+            throw invalidParamError("invalid blocknumber " + id);
         }
     }
 

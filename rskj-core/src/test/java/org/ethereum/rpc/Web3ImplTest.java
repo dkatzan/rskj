@@ -647,6 +647,23 @@ class Web3ImplTest {
     }
 
     @Test
+        //[ "0x<address>", "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3" ] -> return code at given address in the block with that hash
+    void getCodeAtAccountAndBareBlockHash() {
+        final ChainParams chain = createChainWithAContractCode(false);
+        assertEquals("0x010203", chain.web3.eth_getCode(new HexAddressParam(chain.accountAddress), new BlockRefParam(chain.block.getHash().toJsonString())));
+    }
+
+    @Test
+        //[ "0x<address>", "0x<non-existent-block-hash>" ] -> raise block-not-found error
+    void getCodeAtAccountAndNonExistentBareBlockHash() {
+        final ChainParams chain = createChainWithAContractCode(false);
+        final String nonExistentBlockHash = "0x" + String.join("", Collections.nCopies(64, "1"));
+        RskJsonRpcRequestException e = assertThrows(RskJsonRpcRequestException.class,
+                () -> chain.web3.eth_getCode(new HexAddressParam(chain.accountAddress), new BlockRefParam(nonExistentBlockHash)));
+        assertEquals(-32600, e.getCode());
+    }
+
+    @Test
         //[ {argsForCall}, { "blockNumber": "0x0" } -> return contract call respond at given args for call in genesis block
     void callByBlockNumber() {
         final ChainParams chain = createChainWithACall(false);
@@ -665,6 +682,23 @@ class Web3ImplTest {
     void callByNonExistentBlockHash() {
         final ChainParams chain = createChainWithACall(false);
         assertNonExistentBlockHashRefParam(blockRef -> chain.web3.eth_call(TransactionFactoryHelper.toCallArgumentsParam(chain.argsForCall), blockRef));
+    }
+
+    @Test
+        //[ {argsForCall}, "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3" ] -> return contract call respond in the block with that hash
+    void callByBareBlockHash() {
+        final ChainParams chain = createChainWithACall(false);
+        assertEquals(CALL_RESPOND, chain.web3.eth_call(TransactionFactoryHelper.toCallArgumentsParam(chain.argsForCall), new BlockRefParam(chain.block.getHash().toJsonString())));
+    }
+
+    @Test
+        //[ {argsForCall}, "0x<non-existent-block-hash>" ] -> raise block-not-found error
+    void callByNonExistentBareBlockHash() {
+        final ChainParams chain = createChainWithACall(false);
+        final String nonExistentBlockHash = "0x" + String.join("", Collections.nCopies(64, "1"));
+        RskJsonRpcRequestException e = assertThrows(RskJsonRpcRequestException.class,
+                () -> chain.web3.eth_call(TransactionFactoryHelper.toCallArgumentsParam(chain.argsForCall), new BlockRefParam(nonExistentBlockHash)));
+        assertEquals(-32600, e.getCode());
     }
 
     @Test
@@ -2157,9 +2191,11 @@ class Web3ImplTest {
 
         String accountAddress = ByteUtil.toHexString(acc1.getAddress().getBytes());
 
-        String resultCode = web3.eth_getCode(new HexAddressParam(accountAddress), new BlockRefParam("0x100"));
+        HexAddressParam addressParam = new HexAddressParam(accountAddress);
+        RskJsonRpcRequestException e = assertThrows(RskJsonRpcRequestException.class,
+                () -> web3.eth_getCode(addressParam, new BlockRefParam("0x100")));
 
-        assertNull(resultCode);
+        assertEquals(-32600, e.getCode());
     }
 
     @Test

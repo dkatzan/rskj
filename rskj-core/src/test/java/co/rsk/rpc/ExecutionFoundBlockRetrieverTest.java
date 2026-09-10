@@ -284,4 +284,30 @@ class ExecutionFoundBlockRetrieverTest {
         assertEquals(mockBlock, result.getBlock());
         assertNull(result.getFinalState());
     }
+
+    @Test
+    void getByBlockHash() {
+        Block block = mock(Block.class);
+        Keccak256 hash = TestUtils.generateHash("block");
+        when(blockchain.getBlockByHash(hash.getBytes())).thenReturn(block);
+
+        assertThat(retriever.retrieveExecutionBlock(hash.toJsonString()).getBlock(), is(block));
+    }
+
+    @Test
+    void getByNonExistentBlockHashThrows() {
+        Keccak256 hash = TestUtils.generateHash("missing");
+        when(blockchain.getBlockByHash(hash.getBytes())).thenReturn(null);
+
+        RskJsonRpcRequestException e = Assertions.assertThrows(RskJsonRpcRequestException.class,
+                () -> retriever.retrieveExecutionBlock(hash.toJsonString()));
+        assertEquals(-32600, e.getCode());
+    }
+
+    @Test
+    void getByOverflowingHexNumberIsInvalidParam() {
+        RskJsonRpcRequestException e = Assertions.assertThrows(RskJsonRpcRequestException.class,
+                () -> retriever.retrieveExecutionBlock("0x" + "f".repeat(20)));
+        assertEquals(-32602, e.getCode());
+    }
 }

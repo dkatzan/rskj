@@ -31,6 +31,8 @@ import org.ethereum.core.genesis.BlockTag;
 import org.ethereum.listener.CompositeEthereumListener;
 import org.ethereum.listener.EthereumListener;
 import org.ethereum.listener.EthereumListenerAdapter;
+import org.ethereum.rpc.parameters.BlockHashParam;
+import org.ethereum.rpc.parameters.HashParam32;
 import org.ethereum.util.Utils;
 
 import javax.annotation.Nonnull;
@@ -39,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.ethereum.rpc.exception.RskJsonRpcRequestException.blockNotFound;
 import static org.ethereum.rpc.exception.RskJsonRpcRequestException.invalidParamError;
 
 /**
@@ -74,13 +77,25 @@ public class ExecutionBlockRetriever implements InternalService {
             return getPendingBlockResult();
         }
 
+        if (HashParam32.isHash32HexLengthValid(bnOrId) && Utils.isHexadecimalString(bnOrId)) {
+            Block executionBlock = blockchain.getBlockByHash(new BlockHashParam(bnOrId).getHash().getBytes());
+            if (executionBlock == null) {
+                throw blockNotFound(String.format("Block with hash %s not found", bnOrId));
+            }
+            return Result.ofBlock(executionBlock);
+        }
+
         // Is the block specifier either a hexadecimal or decimal number?
         Optional<Long> executionBlockNumber = Optional.empty();
 
-        if (Utils.isHexadecimalString(bnOrId)) {
-            executionBlockNumber = Optional.of(Utils.hexadecimalStringToLong(bnOrId));
-        } else if (Utils.isDecimalString(bnOrId)) {
-            executionBlockNumber = Optional.of(Utils.decimalStringToLong(bnOrId));
+        try {
+            if (Utils.isHexadecimalString(bnOrId)) {
+                executionBlockNumber = Optional.of(Utils.hexadecimalStringToLong(bnOrId));
+            } else if (Utils.isDecimalString(bnOrId)) {
+                executionBlockNumber = Optional.of(Utils.decimalStringToLong(bnOrId));
+            }
+        } catch (IllegalArgumentException e) {
+            throw invalidParamError(String.format("Invalid block number '%s'", bnOrId), e);
         }
 
         if (executionBlockNumber.isPresent()) {
@@ -94,7 +109,7 @@ public class ExecutionBlockRetriever implements InternalService {
         // If we got here, the specifier given is unsupported
         throw invalidParamError(String.format(
                 "Unsupported block specifier '%s'. Can only be either 'earliest', 'latest', " +
-                        "'pending' or a specific block number (either hex - prepending '0x' or decimal).",
+                        "'pending', a block hash or a specific block number (either hex - prepending '0x' or decimal).",
                 bnOrId));
     }
 
